@@ -7,7 +7,7 @@
 <style>
 /* ── FIREBASE CONFIG BANNER ── */
 #config-banner {
-  display: none;
+  display: none !important;
   position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
   background: #B84040; color: #fff;
   font-family: 'Segoe UI', sans-serif; font-size: 14px;
@@ -516,10 +516,10 @@ const LETTERS = ["A","B","C","D"];
 // FIREBASE CONFIG
 // ════════════════════════════════════════════
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",
-  projectId: ""
+  apiKey: "AIzaSyA5y9CVIwHPTdwfo-yr4cnw8xItEx9aFaw",
+  authDomain: "ceg-ice-breaker-module-1.firebaseapp.com",
+  databaseURL: "https://ceg-ice-breaker-module-1-default-rtdb.firebaseio.com",
+  projectId: "ceg-ice-breaker-module-1"
 };
 
 let db = null;
@@ -542,18 +542,8 @@ let listeners = [];
 // INIT
 // ════════════════════════════════════════════
 function init() {
-  const saved = localStorage.getItem("natec_m1_fb_config");
-  if (saved) {
-    try {
-      const c = JSON.parse(saved);
-      Object.assign(FIREBASE_CONFIG, c);
-    } catch(e) {}
-  }
-  if (!FIREBASE_CONFIG.apiKey) {
-    document.getElementById("config-banner").style.display = "block";
-  } else {
-    initFirebase();
-  }
+  // Config is hardcoded — connect directly, no setup needed
+  initFirebase();
 }
 
 function initFirebase() {

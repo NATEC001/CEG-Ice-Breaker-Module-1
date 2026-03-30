@@ -575,7 +575,7 @@ let listeners = [];
 // INIT
 // ════════════════════════════════════════════
 function init() {
-  // Config is hardcoded — connect directly, no setup needed
+  // Called from startApp after Firebase SDK confirmed loaded
   initFirebase();
 }
 
@@ -635,7 +635,16 @@ function showScreen(id) {
 // INSTRUCTOR FLOW
 // ════════════════════════════════════════════
 function goInstructor() {
-  if (!db) { showSetup(); return; }
+  if (!db) {
+    // Try initializing again
+    if (typeof firebase !== "undefined") {
+      initFirebase();
+    }
+    if (!db) {
+      alert("Still connecting to Firebase — please wait a moment and try again.");
+      return;
+    }
+  }
   isHost = true;
   roomCode = generateCode();
   document.getElementById("room-code-display").textContent = roomCode;
@@ -908,14 +917,12 @@ function joinSession() {
   errEl.style.display = "none";
 
   if (!db) {
-    // Firebase not ready yet — retry in 1 second
-    errEl.textContent = "Connecting... please try again in a moment.";
-    errEl.style.display = "block";
-    setTimeout(() => {
-      initFirebase();
-      errEl.style.display = "none";
-    }, 1000);
-    return;
+    if (typeof firebase !== "undefined") initFirebase();
+    if (!db) {
+      errEl.textContent = "Still connecting — please wait a moment and try again.";
+      errEl.style.display = "block";
+      return;
+    }
   }
   if (code.length !== 4) { errEl.textContent = "Please enter the 4-character room code."; errEl.style.display = "block"; return; }
   if (!name) { errEl.textContent = "Please enter your name."; errEl.style.display = "block"; return; }
@@ -1102,22 +1109,36 @@ function cleanupListeners() {
   listeners = [];
 }
 
-// Auto-join from QR code URL param
-window.addEventListener("load", () => {
-  init();
+// Auto-join from QR code URL param — runs after DOM and scripts are ready
+function startApp() {
+  // Initialize Firebase
+  try {
+    if (typeof firebase === "undefined") {
+      console.error("Firebase SDK not loaded yet — retrying in 500ms");
+      setTimeout(startApp, 500);
+      return;
+    }
+    initFirebase();
+  } catch(e) {
+    console.error("Init error:", e);
+    setTimeout(startApp, 500);
+    return;
+  }
+
+  // Handle QR code join link
   const params = new URLSearchParams(window.location.search);
   const joinCode = params.get('join');
   if (joinCode) {
-    // QR code scanned — go straight to join screen with code pre-filled
-    // Prompt for name then auto-join
     showScreen('s-join');
     document.getElementById('join-code').value = joinCode.toUpperCase();
     document.getElementById('join-code').readOnly = true;
     document.getElementById('join-code').style.opacity = '0.7';
-    // Focus name field so student just types name and taps join
     setTimeout(() => document.getElementById('join-name').focus(), 300);
   }
-});
+}
+
+// Use DOMContentLoaded — fires after HTML parsed, external scripts already queued
+document.addEventListener("DOMContentLoaded", startApp);
 </script>
 
 

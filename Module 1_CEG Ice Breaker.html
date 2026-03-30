@@ -453,6 +453,12 @@ body {
   </div>
 </div>
 
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<!-- QR Code library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
 <script>
 // ════════════════════════════════════════════
 // QUESTIONS — Module 1: Lead Laws & Standards
@@ -806,7 +812,7 @@ function revealAndNext() {
     const responses = snap.val() || {};
     const counts = new Array(q.opts.length).fill(0);
     Object.values(responses).forEach(r => {
-      if (r.answer !== undefined && r.answer < counts.length) counts[r.answer]++;
+      if (r.ans !== undefined && r.ans < counts.length) counts[r.ans]++;
     });
     const total = counts.reduce((a, b) => a + b, 0) || 1;
 
@@ -989,7 +995,7 @@ function watchSession() {
       if (session.revealed && !answeredThisQ) {
         const q = gameQuestions[currentQ];
         document.querySelectorAll(".ans-btn").forEach(btn => btn.disabled = true);
-        document.getElementById("p-pts-flash").innerHTML = '<div style="color:var(--mgray);font-size:15px;">Time's up — no answer submitted</div>';
+        document.getElementById("p-pts-flash").innerHTML = `<div style="color:var(--mgray);font-size:15px;">Time's up — no answer submitted</div>`;
         document.getElementById("p-waiting-next").classList.add("show");
         if (q) {
           document.querySelectorAll(".ans-btn").forEach((btn, i) => {
@@ -1049,7 +1055,7 @@ function submitAnswer(idx) {
     bestStreak: playerBestStreak
   });
   // Record response
-  sessionRef.child("responses/" + currentQ + "/" + playerId).set({ answer: idx, correct });
+  sessionRef.child("responses/" + currentQ + "/" + playerId).set({ ans: idx, correct });
 
   document.getElementById("p-score").textContent = playerScore;
 
@@ -1114,12 +1120,7 @@ window.addEventListener("load", () => {
 });
 </script>
 
-<!-- QR Code library -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 </body>
 </html>

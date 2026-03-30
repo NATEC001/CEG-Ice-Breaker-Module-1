@@ -790,7 +790,7 @@ function loadHostQuestion(idx) {
       lbEl.innerHTML = sorted.map((p, i) =>
         `<div class="lb-row">
           <div class="lb-pos">${["🥇","🥈","🥉"][i] || (i+1)}</div>
-          <div class="lb-name">${p.name}</div>
+          <div class="lb-name">${p.name || "Player"}</div>
           <div class="lb-score">${p.score || 0}</div>
         </div>`
       ).join("");
@@ -842,20 +842,23 @@ function revealAndNext() {
   // Push revealed to Firebase so students see it
   sessionRef.update({ revealed: true });
 
-  // Build poll bars from responses
-  sessionRef.child("responses/" + currentQ).once("value", snap => {
+  // Build poll bars from responses — capture currentQ now before async callback
+  const pollQ = currentQ;
+  const pollQData = q;
+  sessionRef.child("responses/" + pollQ).once("value", snap => {
     const responses = snap.val() || {};
-    const counts = new Array(q.opts.length).fill(0);
+    const counts = new Array(pollQData.opts.length).fill(0);
     Object.values(responses).forEach(r => {
       if (r.ans !== undefined && r.ans < counts.length) counts[r.ans]++;
     });
     const total = counts.reduce((a, b) => a + b, 0) || 1;
 
     const barsEl = document.getElementById("poll-bars");
-    barsEl.innerHTML = q.opts.map((opt, i) => {
+    if (!barsEl) return;
+    barsEl.innerHTML = pollQData.opts.map((opt, i) => {
       const count = counts[i];
       const pct = Math.round((count / total) * 100);
-      const barClass = i === q.answer ? "correct-bar" : "wrong-bar";
+      const barClass = i === pollQData.answer ? "correct-bar" : "wrong-bar";
       return `<div class="poll-bar-row">
         <div class="poll-bar-label">
           <span class="opt-name"><strong>${LETTERS[i]}.</strong> ${opt}</span>
@@ -951,7 +954,7 @@ function joinSession() {
     sessionRef = db.ref("sessions/" + roomCode);
 
     // Register player
-    sessionRef.child("players/" + playerId).set({ name, score: 0, correct: 0, bestStreak: 0 });
+    sessionRef.child("players/" + playerId).set({ name: name, score: 0, correct: 0, bestStreak: 0 });
     // Handle disconnect
     sessionRef.child("players/" + playerId).onDisconnect().remove();
 
@@ -968,22 +971,26 @@ function joinSession() {
 
 function watchSession() {
   let lastQ = -1;
+  let lastRevealed = false;
 
   const lSess = sessionRef.on("value", snap => {
     const session = snap.val();
     if (!session) return;
 
-    // Update player count in waiting
+    // Update player count in waiting room
     const playerCount = Object.keys(session.players || {}).length;
-    document.getElementById("w-count").textContent = playerCount + " players joined";
+    const wCount = document.getElementById("w-count");
+    if (wCount) wCount.textContent = playerCount + " players joined";
 
     if (session.status === "playing") {
       gameQuestions = session.questions || [];
       const idx = session.currentQ || 0;
+      const nowRevealed = session.revealed === true;
 
-      // Only reset and load a new question when the question index changes
+      // ── NEW QUESTION: reset everything cleanly
       if (idx !== lastQ) {
         lastQ = idx;
+        lastRevealed = false; // reset local revealed tracker
         currentQ = idx;
         answeredThisQ = false;
 
@@ -995,32 +1002,32 @@ function watchSession() {
 
         buildAnswerButtons(idx);
         showScreen("s-play");
+        return; // stop here — don't process revealed on same tick as new question
       }
 
-      // Only reveal correct answer AFTER instructor reveals AND student has already answered
-      if (session.revealed && answeredThisQ) {
+      // ── REVEAL: only act when revealed transitions false→true
+      if (nowRevealed && !lastRevealed) {
+        lastRevealed = true;
         const q = gameQuestions[currentQ];
-        if (q) {
+        if (!q) return;
+
+        if (answeredThisQ) {
+          // Student already answered — just highlight the correct answer
           document.querySelectorAll(".ans-btn").forEach((btn, i) => {
             btn.disabled = true;
             if (i === q.answer) btn.classList.add("correct");
           });
           document.getElementById("p-waiting-next").classList.add("show");
-        }
-      }
-
-      // If revealed but student hasn't answered yet — just lock buttons, show "waiting"
-      if (session.revealed && !answeredThisQ) {
-        const q = gameQuestions[currentQ];
-        document.querySelectorAll(".ans-btn").forEach(btn => btn.disabled = true);
-        document.getElementById("p-pts-flash").innerHTML = `<div style="color:var(--mgray);font-size:15px;">Time's up — no answer submitted</div>`;
-        document.getElementById("p-waiting-next").classList.add("show");
-        if (q) {
+        } else {
+          // Student did NOT answer in time
+          answeredThisQ = true;
           document.querySelectorAll(".ans-btn").forEach((btn, i) => {
+            btn.disabled = true;
             if (i === q.answer) btn.classList.add("correct");
           });
+          document.getElementById("p-pts-flash").innerHTML = `<div style="color:var(--mgray);font-size:15px;">Time's up — no points this round</div>`;
+          document.getElementById("p-waiting-next").classList.add("show");
         }
-        answeredThisQ = true; // prevent double-trigger
       }
     }
 

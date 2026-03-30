@@ -221,6 +221,17 @@ body {
 .new-session-btn { background: var(--gold); color: var(--navy); font-weight: 900; font-size: 16px; padding: 14px 32px; border: none; border-radius: 10px; cursor: pointer; letter-spacing: 1px; margin-right: 10px; }
 .home-btn { background: transparent; color: var(--navy); font-weight: 700; font-size: 15px; padding: 14px 24px; border: 2px solid var(--lgray); border-radius: 10px; cursor: pointer; }
 
+/* ── POLL BARS ── */
+.poll-bar-row { margin-bottom: 10px; }
+.poll-bar-label { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 4px; font-weight: 500; }
+.poll-bar-label .opt-name { color: #333; }
+.poll-bar-label .opt-count { color: var(--mgray); font-family: var(--ff-mono); font-size: 13px; }
+.poll-bar-track { height: 28px; background: rgba(26,46,74,0.08); border-radius: 6px; overflow: hidden; }
+.poll-bar-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 10px; font-size: 13px; font-weight: 700; color: white; min-width: 2px; }
+.poll-bar-fill.correct-bar { background: var(--green); }
+.poll-bar-fill.wrong-bar { background: var(--red); }
+.poll-bar-fill.neutral-bar { background: #94918A; }
+
 /* ── MODAL ── */
 .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
 .modal-overlay.show { display: flex; }
@@ -329,11 +340,16 @@ body {
     <div class="q-num-badge" id="g-qbadge">Question 1</div>
     <div class="q-text-display" id="g-qtext">—</div>
     <div class="options-grid" id="g-options"></div>
-    <div class="leaderboard-mini">
+    <div id="poll-results-section" style="display:none;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--mgray);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">📊 Poll Results — How Students Answered</div>
+      <div id="poll-bars"></div>
+    </div>
+    <div class="leaderboard-mini" id="lb-section">
       <div class="lb-title">🏆 Top 3</div>
       <div id="g-leaderboard"></div>
     </div>
     <div style="font-size:13px;color:var(--mgray);margin-bottom:8px;text-align:center;">Student responses: <span id="g-resp-count">0</span> / <span id="g-resp-total">0</span></div>
+    <div id="explanation-box" style="display:none;background:#EEF4FF;border-left:3px solid var(--teal);border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:12px;font-size:14px;color:#333;line-height:1.6;"></div>
     <button class="reveal-btn" id="reveal-btn" onclick="revealAndNext()">Reveal Answer &amp; Next →</button>
     <button class="end-btn-sm" onclick="confirmEnd()">End</button>
   </div>
@@ -446,67 +462,78 @@ const ALL_QUESTIONS = [
     q: "Do you feel prepared for today's class and exam?",
     opts: ["Yes, I'm ready", "Are we almost done?", "What exam?"],
     answer: 0,
-    type: "mc"
+    type: "mc",
+    explanation: "Let's find out! This module covers Cal/OSHA 1532.1, EPA RRP, Title 17, and HUD Guidelines."
   },
   {
-    q: "Under current Cal/OSHA regulations, the Action Level for lead exposure is 30 \u00b5g/m\u00b3.",
+    q: "Under current Cal/OSHA regulations, the Action Level for lead exposure is 30 µg/m³.",
     opts: ["True", "False"],
-    answer: 0,
-    type: "tf"
+    answer: 1,
+    type: "tf",
+    explanation: "FALSE — The updated Action Level is 2 µg/m³, not 30. Effective 2025. (CCR Title 8, §1532.1)"
   },
   {
-    q: "Under current Cal/OSHA regulations, the Permissible Exposure Limit (PEL) for lead is 50 \u00b5g/m\u00b3.",
+    q: "Under current Cal/OSHA regulations, the Permissible Exposure Limit (PEL) for lead is 50 µg/m³.",
     opts: ["True", "False"],
-    answer: 0,
-    type: "tf"
+    answer: 1,
+    type: "tf",
+    explanation: "FALSE — The PEL was reduced from 50 to 10 µg/m³. (CCR Title 8, §1532.1(c))"
   },
   {
     q: "Employers can wait for air monitoring results before implementing protective measures.",
     opts: ["True", "False"],
     answer: 1,
-    type: "tf"
+    type: "tf",
+    explanation: "FALSE — Employers must protect employees when exposure is unknown or presumed. Cannot wait. (CCR Title 8, §1532.1(d)(2))"
   },
   {
-    q: "A single blood lead level (BLL) of 30 \u00b5g/dL still triggers medical removal.",
+    q: "Two consecutive blood lead levels (BLL) of 20 µg/dL triggers medical removal.",
     opts: ["True", "False"],
     answer: 0,
-    type: "tf"
+    type: "tf",
+    explanation: "TRUE — Two BLL ≥ 20 µg/dL requires removal. Also, a single BLL ≥ 30 µg/dL still requires removal. (CCR Title 8, §1532.1(k))"
   },
   {
     q: "Workers begin disturbing painted surfaces and no exposure data exists. What must the employer do?",
     opts: ["Wait for air monitoring results", "Assume exposure is low", "Assume exposure is above PEL", "Continue work without controls"],
     answer: 2,
-    type: "mc"
+    type: "mc",
+    explanation: "Assume exposure is ABOVE PEL — Exposure must be assumed hazardous until proven otherwise, requiring immediate protection. (CCR Title 8, §1532.1(d)(2))"
   },
   {
     q: '"RRP work" is the same as "interim controls" under federal EPA definitions.',
     opts: ["True", "False"],
     answer: 1,
-    type: "tf"
+    type: "tf",
+    explanation: "FALSE — RRP (40 CFR 745.80) governs renovation work. Interim controls are a separate HUD-defined hazard reduction strategy."
   },
   {
     q: 'HUD "Interim controls" are the same as CDPH abatement designed to last less than 20 years.',
     opts: ["True", "False"],
-    answer: 1,
-    type: "tf"
+    answer: 0,
+    type: "tf",
+    explanation: "TRUE — CDPH defines temporary abatement as lasting less than 20 years, which aligns with HUD interim controls. (CCR Title 17, §36100)"
   },
   {
     q: "You are repainting a pre-1978 home in California. Which regulations may apply?",
     opts: ["Cal/OSHA lead standard only", "EPA RRP Rule only", "Cal/OSHA + EPA RRP Rule + hazardous waste requirements", "CDPH abatement rules only"],
     answer: 2,
-    type: "mc"
+    type: "mc",
+    explanation: "ALL THREE — Worker safety → Cal/OSHA §1532.1 | Renovation → EPA RRP 40 CFR 745 | Waste → RCRA/DTSC 40 CFR 261"
   },
   {
     q: "Does Title 17 require notification to CDPH prior to any abatement activities?",
     opts: ["True", "False"],
     answer: 0,
-    type: "tf"
+    type: "tf",
+    explanation: "TRUE — Form 8551 must be submitted to CDPH at least 5 days before any abatement begins. (CCR Title 17, §36100(c))"
   },
   {
     q: "Does Cal OSHA require notification prior to any lead activity?",
     opts: ["True", "False"],
     answer: 1,
-    type: "tf"
+    type: "tf",
+    explanation: "FALSE — Cal/OSHA notification is only required when 100+ sq ft of lead-based paint will be disturbed. (CCR Title 8, §1532.1)"
   }
 ];
 
@@ -759,22 +786,70 @@ function loadHostQuestion(idx) {
 function revealAndNext() {
   document.getElementById("reveal-btn").disabled = true;
   const q = gameQuestions[currentQ];
-  // Highlight correct answer
+
+  // Highlight correct answer on options
   q.opts.forEach((o, i) => {
     const el = document.getElementById("host-opt-" + i);
     if (i === q.answer) el.classList.add("correct-opt");
+    else el.style.opacity = "0.5";
   });
+
+  // Show explanation
+  if (q.explanation) {
+    const expBox = document.getElementById("explanation-box");
+    expBox.textContent = q.explanation;
+    expBox.style.display = "block";
+  }
+
+  // Build poll bars from responses
+  sessionRef.child("responses/" + currentQ).once("value", snap => {
+    const responses = snap.val() || {};
+    const counts = new Array(q.opts.length).fill(0);
+    Object.values(responses).forEach(r => {
+      if (r.answer !== undefined && r.answer < counts.length) counts[r.answer]++;
+    });
+    const total = counts.reduce((a, b) => a + b, 0) || 1;
+
+    const barsEl = document.getElementById("poll-bars");
+    barsEl.innerHTML = q.opts.map((opt, i) => {
+      const count = counts[i];
+      const pct = Math.round((count / total) * 100);
+      const barClass = i === q.answer ? "correct-bar" : "wrong-bar";
+      return `<div class="poll-bar-row">
+        <div class="poll-bar-label">
+          <span class="opt-name"><strong>${LETTERS[i]}.</strong> ${opt}</span>
+          <span class="opt-count">${count} (${pct}%)</span>
+        </div>
+        <div class="poll-bar-track">
+          <div class="poll-bar-fill ${barClass}" style="width:${pct}%">${pct > 10 ? pct + "%" : ""}</div>
+        </div>
+      </div>`;
+    }).join("");
+
+    document.getElementById("poll-results-section").style.display = "block";
+    document.getElementById("lb-section").style.display = "none";
+  });
+
   sessionRef.update({ revealed: true });
 
+  // Change button to Next
   setTimeout(() => {
-    currentQ++;
-    if (currentQ >= gameQuestions.length) {
-      endSession();
-    } else {
-      sessionRef.update({ currentQ, revealed: false });
-      loadHostQuestion(currentQ);
-    }
-  }, 2500);
+    const btn = document.getElementById("reveal-btn");
+    btn.textContent = currentQ + 1 < gameQuestions.length ? "Next Question →" : "See Final Results →";
+    btn.disabled = false;
+    btn.onclick = () => {
+      currentQ++;
+      if (currentQ >= gameQuestions.length) {
+        endSession();
+      } else {
+        sessionRef.update({ currentQ, revealed: false });
+        document.getElementById("poll-results-section").style.display = "none";
+        document.getElementById("lb-section").style.display = "block";
+        document.getElementById("explanation-box").style.display = "none";
+        loadHostQuestion(currentQ);
+      }
+    };
+  }, 800);
 }
 
 function confirmEnd() {

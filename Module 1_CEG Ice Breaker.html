@@ -975,9 +975,11 @@ function listenForGameStart() {
       answeredThisQ = false;
       answerRevealed = false;
       sessionRef.off();
-      listenForGameChanges();
+      // Render and show screen FIRST, then start listening for changes
+      // This prevents listenForGameChanges from firing before the screen is ready
       renderStudentQuestion(currentQ);
       showScreen("s-play");
+      listenForGameChanges();
     }
     if (data.status === "ended") sessionRef.off();
   });
@@ -987,6 +989,11 @@ function listenForGameChanges() {
   sessionRef.on("value", snap => {
     if (!snap.exists()) return;
     const data = snap.val();
+
+    // Only act when the student game screen is actually visible
+    if (!document.getElementById("s-play").classList.contains("active") &&
+        !document.getElementById("s-results-student").classList.contains("active")) return;
+
     if (data.currentQ !== undefined && data.currentQ !== currentQ) {
       currentQ = data.currentQ;
       answeredThisQ = false;

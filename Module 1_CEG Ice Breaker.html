@@ -970,15 +970,13 @@ function listenForGameStart() {
     const pCount = Object.keys(data.players || {}).length;
     const wCount = document.getElementById("w-count");
     if (wCount) wCount.textContent = pCount + " players joined";
-    if (data.status === "playing" && document.getElementById("s-waiting").classList.contains("active")) {
+    // Only transition once — when playing AND student-game screen is NOT yet active
+    if (data.status === "playing" && !document.getElementById("s-play").classList.contains("active")) {
       currentQ = data.currentQ || 0;
       answeredThisQ = false;
       answerRevealed = false;
-      sessionRef.off();
-      // Render and show screen FIRST, then start listening for changes
-      // This prevents listenForGameChanges from firing before the screen is ready
-      renderStudentQuestion(currentQ);
       showScreen("s-play");
+      renderStudentQuestion(currentQ);
       listenForGameChanges();
     }
     if (data.status === "ended") sessionRef.off();
@@ -989,18 +987,19 @@ function listenForGameChanges() {
   sessionRef.on("value", snap => {
     if (!snap.exists()) return;
     const data = snap.val();
-
-    // Only act when the student game screen is actually visible
-    if (!document.getElementById("s-play").classList.contains("active") &&
-        !document.getElementById("s-results-student").classList.contains("active")) return;
-
-    if (data.currentQ !== undefined && data.currentQ !== currentQ) {
+    // Question changed — mirror Module 7's exact guard
+    if (data.currentQ !== undefined && data.currentQ !== currentQ &&
+        document.getElementById("s-play").classList.contains("active")) {
       currentQ = data.currentQ;
       answeredThisQ = false;
       answerRevealed = false;
+      document.getElementById("p-waiting-next").classList.remove("show");
+      document.getElementById("p-pts-flash").innerHTML = "";
       renderStudentQuestion(currentQ);
     }
-    if (data.revealed === true && !answerRevealed) {
+    // Reveal — mirror Module 7's exact guard (screen must be active)
+    if (data.revealed === true && !answerRevealed &&
+        document.getElementById("s-play").classList.contains("active")) {
       revealAnswerOnStudent();
     }
     if (data.status === "ended") {

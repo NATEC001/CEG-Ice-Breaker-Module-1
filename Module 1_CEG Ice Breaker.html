@@ -901,7 +901,16 @@ function joinSession() {
   const errEl = document.getElementById("join-error");
   errEl.style.display = "none";
 
-  if (!db) { showSetup(); return; }
+  if (!db) {
+    // Firebase not ready yet — retry in 1 second
+    errEl.textContent = "Connecting... please try again in a moment.";
+    errEl.style.display = "block";
+    setTimeout(() => {
+      initFirebase();
+      errEl.style.display = "none";
+    }, 1000);
+    return;
+  }
   if (code.length !== 4) { errEl.textContent = "Please enter the 4-character room code."; errEl.style.display = "block"; return; }
   if (!name) { errEl.textContent = "Please enter your name."; errEl.style.display = "block"; return; }
 
@@ -1087,14 +1096,20 @@ function cleanupListeners() {
   listeners = [];
 }
 
-// Auto-fill join code from URL param
+// Auto-join from QR code URL param
 window.addEventListener("load", () => {
   init();
   const params = new URLSearchParams(window.location.search);
   const joinCode = params.get('join');
   if (joinCode) {
+    // QR code scanned — go straight to join screen with code pre-filled
+    // Prompt for name then auto-join
     showScreen('s-join');
     document.getElementById('join-code').value = joinCode.toUpperCase();
+    document.getElementById('join-code').readOnly = true;
+    document.getElementById('join-code').style.opacity = '0.7';
+    // Focus name field so student just types name and taps join
+    setTimeout(() => document.getElementById('join-name').focus(), 300);
   }
 });
 </script>

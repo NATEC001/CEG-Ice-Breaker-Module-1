@@ -174,7 +174,9 @@ body {
   text-align: left; cursor: pointer; transition: all .15s; color: #333; display: flex; align-items: center; gap: 12px;
   outline: none; -webkit-tap-highlight-color: transparent;
 }
-.ans-btn:hover:not(:disabled):not(:focus-visible) { border-color: var(--teal); background: rgba(14,124,123,0.06); }
+@media (hover: hover) and (pointer: fine) {
+  .ans-btn:hover:not(:disabled) { border-color: var(--teal); background: rgba(14,124,123,0.06); }
+}
 .ans-btn:focus { outline: none; box-shadow: none; border-color: var(--lgray); background: white; }
 .ans-btn:focus-visible { outline: none; box-shadow: none; }
 .ans-btn:disabled { cursor: default; }

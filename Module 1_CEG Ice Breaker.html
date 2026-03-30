@@ -570,6 +570,7 @@ let playerStreak = 0;
 let playerBestStreak = 0;
 let answeredThisQ = false;
 let answerRevealed = false;
+let questionReadyTime = 0;
 let listeners = [];
 
 // ════════════════════════════════════════════
@@ -987,17 +988,35 @@ function renderStudentQuestion(idx) {
   document.getElementById("p-waiting-next").classList.remove("show");
   document.getElementById("p-pts-flash").innerHTML = "";
 
-  // Build buttons with correct answer baked into onclick — same as Module 7
+  // Build buttons with NO onclick — use touch/click listeners below
   const grid = document.getElementById("p-answers");
+  const correctIdx = q.answer;
   grid.innerHTML = q.opts.map((o, i) =>
-    `<button class="ans-btn" onclick="submitAnswer(${i}, ${q.answer})">
+    `<button class="ans-btn" data-i="${i}">
       <span class="ans-letter">${LETTERS[i]}</span>${o}
     </button>`
   ).join("");
 
-  // Reset flags AFTER building buttons — same order as Module 7
+  // Reset flags AFTER building buttons
   answeredThisQ = false;
   answerRevealed = false;
+  questionReadyTime = Date.now();
+
+  // Attach touch/click handlers using touchstart + preventDefault
+  // This is the standard fix for mobile ghost clicks — prevents the
+  // 300ms delayed click event that fires after a touch
+  grid.querySelectorAll(".ans-btn").forEach(btn => {
+    const i = parseInt(btn.dataset.i);
+    // touchstart with preventDefault stops ghost clicks cold
+    btn.addEventListener("touchstart", function(e) {
+      e.preventDefault(); // blocks subsequent click event
+      submitAnswer(i, correctIdx);
+    }, { passive: false });
+    // click handler for desktop/mouse users
+    btn.addEventListener("click", function(e) {
+      submitAnswer(i, correctIdx);
+    });
+  });
 
   showScreen("s-play");
 }
@@ -1065,6 +1084,9 @@ function buildAnswerButtons(idx) {
 
 function submitAnswer(idx, correctIdx) {
   if (answeredThisQ) return;
+  // Ignore any tap that fires within 1 second of question rendering
+  // This definitively blocks ghost touches from screen transitions
+  if (!questionReadyTime || Date.now() - questionReadyTime < 1000) return;
   answeredThisQ = true;
 
   const isCorrect = idx === correctIdx;

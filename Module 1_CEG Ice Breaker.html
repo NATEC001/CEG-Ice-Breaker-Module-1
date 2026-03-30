@@ -1014,6 +1014,7 @@ function watchSession() {
 
       // ── REVEAL: instructor revealed answer — lock buttons if student hasn't answered
       if (session.revealed === true && !answeredThisQ) {
+        console.log("REVEAL LOCK: revealed=true answeredThisQ=false currentQ=" + currentQ);
         answeredThisQ = true;
         document.querySelectorAll(".ans-btn").forEach(btn => btn.disabled = true);
         document.getElementById("p-pts-flash").innerHTML = '<div style="color:var(--mgray);font-size:15px;">Time\'s up \u2014 no points this round</div>';
@@ -1054,6 +1055,7 @@ function buildAnswerButtons(idx) {
 }
 
 function submitAnswer(idx) {
+  console.log("submitAnswer called with idx=" + idx + " answeredThisQ=" + answeredThisQ + " stack=" + new Error().stack.split("\n")[1]);
   if (answeredThisQ) return;
   answeredThisQ = true;
 

@@ -659,15 +659,15 @@ function generateQR(code) {
   const joinUrl = window.location.href.split('?')[0] + '?join=' + code;
   document.getElementById('qr-url-display').textContent = joinUrl;
   const container = document.getElementById('qr-container');
-  // Use reliable image-based QR via Google Charts
   container.innerHTML = '';
-  container.style.cssText = 'display:flex;align-items:center;justify-content:center;background:white;padding:12px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);margin:10px auto;width:196px;height:196px;';
+  container.style.cssText = 'display:flex;align-items:center;justify-content:center;background:white;padding:14px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);margin:10px auto;width:228px;height:228px;';
   const img = document.createElement('img');
-  img.width = 172;
-  img.height = 172;
+  img.width = 200;
+  img.height = 200;
   img.style.display = 'block';
   img.alt = 'Scan to join';
-  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=172x172&color=1A2E4A&bgcolor=ffffff&data=' + encodeURIComponent(joinUrl);
+  // Pure black on white — maximum phone camera compatibility, larger size
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=ffffff&qzone=2&data=' + encodeURIComponent(joinUrl);
   container.appendChild(img);
 }
 
@@ -978,7 +978,6 @@ function joinSession() {
 
 function watchSession() {
   let lastQ = -1;
-  let lastRevealed = false;
 
   const lSess = sessionRef.on("value", snap => {
     const session = snap.val();
@@ -992,12 +991,10 @@ function watchSession() {
     if (session.status === "playing") {
       gameQuestions = session.questions || [];
       const idx = session.currentQ || 0;
-      const nowRevealed = session.revealed === true;
 
-      // ── NEW QUESTION: reset everything cleanly
+      // ── NEW QUESTION
       if (idx !== lastQ) {
         lastQ = idx;
-        lastRevealed = nowRevealed; // sync with current snapshot so stale revealed:true doesnt trigger
         currentQ = idx;
         answeredThisQ = false;
 
@@ -1007,45 +1004,20 @@ function watchSession() {
         document.getElementById("p-waiting-next").classList.remove("show");
         document.getElementById("p-pts-flash").innerHTML = "";
 
-        // Explicitly clear any lingering button state before building new ones
         const oldGrid = document.getElementById("p-answers");
         if (oldGrid) oldGrid.innerHTML = "";
         buildAnswerButtons(idx);
         showScreen("s-play");
-        // Block ghost clicks on mobile: disable buttons briefly after screen transition
-        document.querySelectorAll(".ans-btn").forEach(b => b.disabled = true);
-        setTimeout(() => {
-          if (!answeredThisQ) {
-            document.querySelectorAll(".ans-btn").forEach(b => b.disabled = false);
-          }
-        }, 600);
-        return; // stop here — don't process revealed on same tick as new question
+
+        return;
       }
 
-      // ── REVEAL: only act when revealed transitions false→true
-      if (nowRevealed && !lastRevealed) {
-        lastRevealed = true;
-        // Use local ALL_QUESTIONS for answer — never trust Firebase for answer data
-        const q = ALL_QUESTIONS[currentQ];
-        if (!q) return;
-
-        if (answeredThisQ) {
-          // Student already answered — highlight the correct answer
-          document.querySelectorAll(".ans-btn").forEach((btn, i) => {
-            btn.disabled = true;
-            if (i === q.answer) btn.classList.add("correct");
-          });
-          document.getElementById("p-waiting-next").classList.add("show");
-        } else {
-          // Student did NOT answer in time
-          answeredThisQ = true;
-          document.querySelectorAll(".ans-btn").forEach((btn, i) => {
-            btn.disabled = true;
-            if (i === q.answer) btn.classList.add("correct");
-          });
-          document.getElementById("p-pts-flash").innerHTML = `<div style="color:var(--mgray);font-size:15px;">Time's up — no points this round</div>`;
-          document.getElementById("p-waiting-next").classList.add("show");
-        }
+      // ── REVEAL: instructor revealed answer — lock buttons if student hasn't answered
+      if (session.revealed === true && !answeredThisQ) {
+        answeredThisQ = true;
+        document.querySelectorAll(".ans-btn").forEach(btn => btn.disabled = true);
+        document.getElementById("p-pts-flash").innerHTML = '<div style="color:var(--mgray);font-size:15px;">Time\'s up \u2014 no points this round</div>';
+        document.getElementById("p-waiting-next").classList.add("show");
       }
     }
 
@@ -1062,11 +1034,23 @@ function buildAnswerButtons(idx) {
   const q = ALL_QUESTIONS[idx];
   if (!q) return;
   const grid = document.getElementById("p-answers");
+  // Build buttons with NO onclick — attach listeners after delay to block ghost clicks
   grid.innerHTML = q.opts.map((o, i) =>
-    `<button class="ans-btn" onclick="submitAnswer(${i})">
+    `<button class="ans-btn" data-idx="${i}" disabled>
       <span class="ans-letter">${LETTERS[i]}</span>${o}
     </button>`
   ).join("");
+  // Enable buttons and attach click handlers after 800ms
+  // This completely prevents ghost clicks from mobile screen transitions
+  setTimeout(() => {
+    if (answeredThisQ) return; // already answered, don't enable
+    grid.querySelectorAll(".ans-btn").forEach(btn => {
+      btn.disabled = false;
+      btn.addEventListener("click", function() {
+        submitAnswer(parseInt(this.dataset.idx));
+      }, { once: true }); // once:true means it can only fire once per button
+    });
+  }, 800);
 }
 
 function submitAnswer(idx) {

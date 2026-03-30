@@ -569,6 +569,7 @@ let playerCorrect = 0;
 let playerStreak = 0;
 let playerBestStreak = 0;
 let answeredThisQ = false;
+let answerRevealed = false;
 let listeners = [];
 
 // ════════════════════════════════════════════
@@ -976,6 +977,50 @@ function joinSession() {
   });
 }
 
+function renderStudentQuestion(idx) {
+  const q = ALL_QUESTIONS[idx];
+  if (!q) return;
+
+  document.getElementById("p-qnum").textContent = "Question " + (idx + 1);
+  document.getElementById("p-qtext").textContent = q.q;
+  document.getElementById("p-prog").style.width = ((idx / ALL_QUESTIONS.length) * 100) + "%";
+  document.getElementById("p-waiting-next").classList.remove("show");
+  document.getElementById("p-pts-flash").innerHTML = "";
+
+  // Build buttons with correct answer baked into onclick — same as Module 7
+  const grid = document.getElementById("p-answers");
+  grid.innerHTML = q.opts.map((o, i) =>
+    `<button class="ans-btn" onclick="submitAnswer(${i}, ${q.answer})">
+      <span class="ans-letter">${LETTERS[i]}</span>${o}
+    </button>`
+  ).join("");
+
+  // Reset flags AFTER building buttons — same order as Module 7
+  answeredThisQ = false;
+  answerRevealed = false;
+
+  showScreen("s-play");
+}
+
+function revealAnswerOnStudent() {
+  if (answerRevealed) return;
+  answerRevealed = true;
+  const q = ALL_QUESTIONS[currentQ];
+  if (!q) return;
+
+  document.querySelectorAll(".ans-btn").forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === q.answer) btn.classList.add("correct");
+  });
+
+  if (!answeredThisQ) {
+    answeredThisQ = true;
+    document.getElementById("p-pts-flash").innerHTML =
+      `<div style="color:var(--mgray);font-size:15px;">Time's up — no points this round</div>`;
+    document.getElementById("p-waiting-next").classList.add("show");
+  }
+}
+
 function watchSession() {
   let lastQ = -1;
 
@@ -983,42 +1028,24 @@ function watchSession() {
     const session = snap.val();
     if (!session) return;
 
-    // Update player count in waiting room
-    const playerCount = Object.keys(session.players || {}).length;
     const wCount = document.getElementById("w-count");
-    if (wCount) wCount.textContent = playerCount + " players joined";
+    if (wCount) {
+      const playerCount = Object.keys(session.players || {}).length;
+      wCount.textContent = playerCount + " players joined";
+    }
 
     if (session.status === "playing") {
-      gameQuestions = session.questions || [];
       const idx = session.currentQ || 0;
 
-      // ── NEW QUESTION
       if (idx !== lastQ) {
         lastQ = idx;
         currentQ = idx;
-        answeredThisQ = false;
-
-        document.getElementById("p-qnum").textContent = "Question " + (idx + 1);
-        document.getElementById("p-qtext").textContent = ALL_QUESTIONS[idx] ? ALL_QUESTIONS[idx].q : "";
-        document.getElementById("p-prog").style.width = ((idx / ALL_QUESTIONS.length) * 100) + "%";
-        document.getElementById("p-waiting-next").classList.remove("show");
-        document.getElementById("p-pts-flash").innerHTML = "";
-
-        const oldGrid = document.getElementById("p-answers");
-        if (oldGrid) oldGrid.innerHTML = "";
-        buildAnswerButtons(idx);
-        showScreen("s-play");
-
+        renderStudentQuestion(idx);
         return;
       }
 
-      // ── REVEAL: instructor revealed answer — lock buttons if student hasn't answered
-      if (session.revealed === true && !answeredThisQ) {
-        console.log("REVEAL LOCK: revealed=true answeredThisQ=false currentQ=" + currentQ);
-        answeredThisQ = true;
-        document.querySelectorAll(".ans-btn").forEach(btn => btn.disabled = true);
-        document.getElementById("p-pts-flash").innerHTML = '<div style="color:var(--mgray);font-size:15px;">Time\'s up \u2014 no points this round</div>';
-        document.getElementById("p-waiting-next").classList.add("show");
+      if (session.revealed === true && !answerRevealed) {
+        revealAnswerOnStudent();
       }
     }
 
@@ -1030,47 +1057,31 @@ function watchSession() {
   listeners.push({ ref: sessionRef, handle: lSess, event: "value" });
 }
 
+
 function buildAnswerButtons(idx) {
-  // Always use local ALL_QUESTIONS — never Firebase data for answer buttons
-  const q = ALL_QUESTIONS[idx];
-  if (!q) return;
-  const grid = document.getElementById("p-answers");
-  // Build buttons with NO onclick — attach listeners after delay to block ghost clicks
-  grid.innerHTML = q.opts.map((o, i) =>
-    `<button class="ans-btn" data-idx="${i}" disabled>
-      <span class="ans-letter">${LETTERS[i]}</span>${o}
-    </button>`
-  ).join("");
-  // Enable buttons and attach click handlers after 800ms
-  // This completely prevents ghost clicks from mobile screen transitions
-  setTimeout(() => {
-    if (answeredThisQ) return; // already answered, don't enable
-    grid.querySelectorAll(".ans-btn").forEach(btn => {
-      btn.disabled = false;
-      btn.addEventListener("click", function() {
-        submitAnswer(parseInt(this.dataset.idx));
-      }, { once: true }); // once:true means it can only fire once per button
-    });
-  }, 800);
+  renderStudentQuestion(idx);
 }
 
-function submitAnswer(idx) {
-  console.log("submitAnswer called with idx=" + idx + " answeredThisQ=" + answeredThisQ + " stack=" + new Error().stack.split("\n")[1]);
+
+function submitAnswer(idx, correctIdx) {
   if (answeredThisQ) return;
   answeredThisQ = true;
 
-  // Use local ALL_QUESTIONS for answer lookup — never Firebase data
-  const q = ALL_QUESTIONS[currentQ];
-  const correct = idx === q.answer;
-  const pts = correct ? 100 : 0;
+  const isCorrect = idx === correctIdx;
+  const pts = isCorrect ? 100 : 0;
 
-  // Visual feedback
+  // Lock all buttons — highlight chosen with subtle teal (same as Module 7)
+  // DO NOT show green/red yet — instructor reveals that
   document.querySelectorAll(".ans-btn").forEach((btn, i) => {
     btn.disabled = true;
-    if (i === idx) btn.classList.add(correct ? "correct" : "wrong");
+    if (i === idx) {
+      btn.style.borderColor = "var(--teal)";
+      btn.style.background = "rgba(14,124,123,0.08)";
+      btn.style.fontWeight = "700";
+    }
   });
 
-  if (correct) {
+  if (isCorrect) {
     playerCorrect++;
     playerStreak++;
     if (playerStreak > playerBestStreak) playerBestStreak = playerStreak;
@@ -1079,23 +1090,19 @@ function submitAnswer(idx) {
     playerStreak = 0;
   }
 
-  // Update in DB
+  // Save to Firebase
   sessionRef.child("players/" + playerId).update({
     score: playerScore,
     correct: playerCorrect,
     bestStreak: playerBestStreak
   });
-  // Record response
-  sessionRef.child("responses/" + currentQ + "/" + playerId).set({ ans: idx, correct });
+  sessionRef.child("responses/" + currentQ + "/" + playerId).set({ ans: idx, correct: isCorrect });
 
   document.getElementById("p-score").textContent = playerScore;
 
-  const flash = document.getElementById("p-pts-flash");
-  if (correct) {
-    flash.innerHTML = `<div class="pts-flash">+${pts} pts \u2713</div>`;
-  } else {
-    flash.innerHTML = `<div style="color:var(--red);font-size:18px;font-weight:700;">No points this round</div>`;
-  }
+  // Neutral "locked in" message — no color hint (same as Module 7)
+  document.getElementById("p-pts-flash").innerHTML =
+    `<div style="color:var(--teal);font-size:15px;font-weight:600;">Answer locked in — waiting for instructor to reveal...</div>`;
   document.getElementById("p-waiting-next").classList.add("show");
 }
 

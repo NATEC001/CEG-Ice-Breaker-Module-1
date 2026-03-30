@@ -593,7 +593,7 @@ function initFirebase() {
     document.getElementById("config-banner").style.display = "none";
     return true;
   } catch(e) {
-    console.error("Firebase init failed:", e);
+    console.warn("Firebase init failed:", e.message);
     return false;
   }
 }
@@ -761,23 +761,26 @@ function loadHostQuestion(idx) {
   ).join("");
 
   document.getElementById("reveal-btn").textContent =
-    idx + 1 < total ? "Reveal Answer & Next \u2192" : "Reveal Answer & See Results \u2192";
+    "Reveal Answer & Next →";
   document.getElementById("reveal-btn").disabled = false;
+  revealState = "reveal";
 
-  // Watch responses
-  const respRef = sessionRef.child("responses/" + idx);
-  const lResp = respRef.on("value", snap => {
+  // Remove old per-question listeners before adding new ones
+  if (window._respRef && window._lResp) window._respRef.off("value", window._lResp);
+  if (window._pRef2 && window._lLb) window._pRef2.off("value", window._lLb);
+
+  // Watch responses for this question
+  window._respRef = sessionRef.child("responses/" + idx);
+  window._lResp = window._respRef.on("value", snap => {
     const resp = snap.val() || {};
     const count = Object.keys(resp).length;
-    const total_p = Object.keys((db.__players || {})).length;
     document.getElementById("g-answered").textContent = count;
     document.getElementById("g-resp-count").textContent = count;
   });
-  listeners.push({ ref: respRef, handle: lResp, event: "value" });
 
   // Watch leaderboard
-  const pRef2 = sessionRef.child("players");
-  const lLb = pRef2.on("value", snap => {
+  window._pRef2 = sessionRef.child("players");
+  window._lLb = window._pRef2.on("value", snap => {
     const players = snap.val() || {};
     const sorted = Object.values(players).sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3);
     const lbEl = document.getElementById("g-leaderboard");
@@ -795,18 +798,38 @@ function loadHostQuestion(idx) {
     const total_p = Object.keys(snap.val() || {}).length;
     document.getElementById("g-resp-total").textContent = total_p;
   });
-  listeners.push({ ref: pRef2, handle: lLb, event: "value" });
 }
 
+let revealState = "reveal"; // "reveal" or "next"
+
 function revealAndNext() {
+  if (revealState === "next") {
+    // Advance to next question
+    currentQ++;
+    if (currentQ >= gameQuestions.length) {
+      endSession();
+      return;
+    }
+    revealState = "reveal";
+    sessionRef.update({ currentQ: currentQ, revealed: false });
+    document.getElementById("poll-results-section").style.display = "none";
+    document.getElementById("lb-section").style.display = "block";
+    document.getElementById("explanation-box").style.display = "none";
+    loadHostQuestion(currentQ);
+    return;
+  }
+
+  // revealState === "reveal"
   document.getElementById("reveal-btn").disabled = true;
   const q = gameQuestions[currentQ];
 
-  // Highlight correct answer on options
+  // Highlight correct answer on host options
   q.opts.forEach((o, i) => {
     const el = document.getElementById("host-opt-" + i);
-    if (i === q.answer) el.classList.add("correct-opt");
-    else el.style.opacity = "0.5";
+    if (el) {
+      if (i === q.answer) el.classList.add("correct-opt");
+      else el.style.opacity = "0.5";
+    }
   });
 
   // Show explanation
@@ -815,6 +838,9 @@ function revealAndNext() {
     expBox.textContent = q.explanation;
     expBox.style.display = "block";
   }
+
+  // Push revealed to Firebase so students see it
+  sessionRef.update({ revealed: true });
 
   // Build poll bars from responses
   sessionRef.child("responses/" + currentQ).once("value", snap => {
@@ -843,28 +869,13 @@ function revealAndNext() {
 
     document.getElementById("poll-results-section").style.display = "block";
     document.getElementById("lb-section").style.display = "none";
-  });
 
-  sessionRef.update({ revealed: true });
-
-  // Change button to Next
-  setTimeout(() => {
+    // Update button to "Next"
     const btn = document.getElementById("reveal-btn");
     btn.textContent = currentQ + 1 < gameQuestions.length ? "Next Question →" : "See Final Results →";
     btn.disabled = false;
-    btn.onclick = () => {
-      currentQ++;
-      if (currentQ >= gameQuestions.length) {
-        endSession();
-      } else {
-        sessionRef.update({ currentQ, revealed: false });
-        document.getElementById("poll-results-section").style.display = "none";
-        document.getElementById("lb-section").style.display = "block";
-        document.getElementById("explanation-box").style.display = "none";
-        loadHostQuestion(currentQ);
-      }
-    };
-  }, 800);
+    revealState = "next";
+  });
 }
 
 function confirmEnd() {
@@ -1114,13 +1125,12 @@ function startApp() {
   // Initialize Firebase
   try {
     if (typeof firebase === "undefined") {
-      console.error("Firebase SDK not loaded yet — retrying in 500ms");
       setTimeout(startApp, 500);
       return;
     }
     initFirebase();
   } catch(e) {
-    console.error("Init error:", e);
+    console.log("Firebase init retry...", e.message);
     setTimeout(startApp, 500);
     return;
   }

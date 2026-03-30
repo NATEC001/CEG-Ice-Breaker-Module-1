@@ -997,7 +997,7 @@ function watchSession() {
       // ── NEW QUESTION: reset everything cleanly
       if (idx !== lastQ) {
         lastQ = idx;
-        lastRevealed = false; // reset local revealed tracker
+        lastRevealed = nowRevealed; // sync with current snapshot so stale revealed:true doesnt trigger
         currentQ = idx;
         answeredThisQ = false;
 
@@ -1007,6 +1007,9 @@ function watchSession() {
         document.getElementById("p-waiting-next").classList.remove("show");
         document.getElementById("p-pts-flash").innerHTML = "";
 
+        // Explicitly clear any lingering button state before building new ones
+        const oldGrid = document.getElementById("p-answers");
+        if (oldGrid) oldGrid.innerHTML = "";
         buildAnswerButtons(idx);
         showScreen("s-play");
         return; // stop here — don't process revealed on same tick as new question

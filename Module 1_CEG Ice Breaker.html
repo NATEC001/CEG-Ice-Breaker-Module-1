@@ -1002,18 +1002,10 @@ function renderStudentQuestion(idx) {
   answerRevealed = false;
   questionReadyTime = Date.now();
 
-  // Attach touch/click handlers using touchstart + preventDefault
-  // This is the standard fix for mobile ghost clicks — prevents the
-  // 300ms delayed click event that fires after a touch
+  // Use click only — simple and reliable on both mobile and desktop
   grid.querySelectorAll(".ans-btn").forEach(btn => {
     const i = parseInt(btn.dataset.i);
-    // touchstart with preventDefault stops ghost clicks cold
-    btn.addEventListener("touchstart", function(e) {
-      e.preventDefault(); // blocks subsequent click event
-      submitAnswer(i, correctIdx);
-    }, { passive: false });
-    // click handler for desktop/mouse users
-    btn.addEventListener("click", function(e) {
+    btn.addEventListener("click", function() {
       submitAnswer(i, correctIdx);
     });
   });

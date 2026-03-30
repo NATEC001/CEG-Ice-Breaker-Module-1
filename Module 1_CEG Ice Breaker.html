@@ -172,8 +172,11 @@ body {
   width: 100%; padding: 14px 18px; border-radius: 10px; border: 2px solid var(--lgray);
   background: white; font-family: var(--ff); font-size: 16px; font-weight: 500;
   text-align: left; cursor: pointer; transition: all .15s; color: #333; display: flex; align-items: center; gap: 12px;
+  outline: none; -webkit-tap-highlight-color: transparent;
 }
-.ans-btn:hover:not(:disabled) { border-color: var(--teal); background: rgba(14,124,123,0.06); }
+.ans-btn:hover:not(:disabled):not(:focus-visible) { border-color: var(--teal); background: rgba(14,124,123,0.06); }
+.ans-btn:focus { outline: none; box-shadow: none; border-color: var(--lgray); background: white; }
+.ans-btn:focus-visible { outline: none; box-shadow: none; }
 .ans-btn:disabled { cursor: default; }
 .ans-btn.selected { border-color: var(--teal); background: rgba(14,124,123,0.12); color: var(--teal); font-weight: 700; }
 .ans-btn.correct { border-color: var(--green); background: rgba(46,125,82,0.12); color: var(--green); font-weight: 700; }
@@ -570,6 +573,7 @@ let playerStreak = 0;
 let playerBestStreak = 0;
 let answeredThisQ = false;
 let answerRevealed = false;
+let questionReadyAt = 0;
 let listeners = [];
 
 // ════════════════════════════════════════════
@@ -1026,10 +1030,15 @@ function renderStudentQuestion(idx) {
   ).join("");
   answeredThisQ = false;
   answerRevealed = false;
+  questionReadyAt = Date.now();
+  // Remove focus from any element so mobile browser doesn't highlight a button
+  if (document.activeElement) document.activeElement.blur();
 }
 
 function submitAnswer(idx, correctIdx) {
   if (answeredThisQ) return;
+  // Block ghost clicks: ignore taps within 600ms of question rendering
+  if (Date.now() - questionReadyAt < 600) return;
   answeredThisQ = true;
   const isCorrect = idx === correctIdx;
   const pts = isCorrect ? 100 : 0;

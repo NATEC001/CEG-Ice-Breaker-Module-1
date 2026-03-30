@@ -1012,6 +1012,13 @@ function watchSession() {
         if (oldGrid) oldGrid.innerHTML = "";
         buildAnswerButtons(idx);
         showScreen("s-play");
+        // Block ghost clicks on mobile: disable buttons briefly after screen transition
+        document.querySelectorAll(".ans-btn").forEach(b => b.disabled = true);
+        setTimeout(() => {
+          if (!answeredThisQ) {
+            document.querySelectorAll(".ans-btn").forEach(b => b.disabled = false);
+          }
+        }, 600);
         return; // stop here — don't process revealed on same tick as new question
       }
 

@@ -733,10 +733,17 @@ function shuffle(arr) {
 function startGame() {
   gameQuestions = ALL_QUESTIONS; // Always all 11, always in order
   currentQ = 0;
+  // Store questions WITHOUT answer/explanation fields — students use local ALL_QUESTIONS
+  const questionsForFirebase = gameQuestions.map((q, i) => ({
+    index: i,
+    q: q.q,
+    opts: q.opts,
+    type: q.type
+  }));
   sessionRef.update({
     status: "playing",
     qCount: gameQuestions.length,
-    questions: gameQuestions.map((q, i) => ({ ...q, index: i })),
+    questions: questionsForFirebase,
     currentQ: 0,
     revealed: false
   });
@@ -995,8 +1002,8 @@ function watchSession() {
         answeredThisQ = false;
 
         document.getElementById("p-qnum").textContent = "Question " + (idx + 1);
-        document.getElementById("p-qtext").textContent = gameQuestions[idx] ? gameQuestions[idx].q : "";
-        document.getElementById("p-prog").style.width = ((idx / gameQuestions.length) * 100) + "%";
+        document.getElementById("p-qtext").textContent = ALL_QUESTIONS[idx] ? ALL_QUESTIONS[idx].q : "";
+        document.getElementById("p-prog").style.width = ((idx / ALL_QUESTIONS.length) * 100) + "%";
         document.getElementById("p-waiting-next").classList.remove("show");
         document.getElementById("p-pts-flash").innerHTML = "";
 
@@ -1008,11 +1015,12 @@ function watchSession() {
       // ── REVEAL: only act when revealed transitions false→true
       if (nowRevealed && !lastRevealed) {
         lastRevealed = true;
-        const q = gameQuestions[currentQ];
+        // Use local ALL_QUESTIONS for answer — never trust Firebase for answer data
+        const q = ALL_QUESTIONS[currentQ];
         if (!q) return;
 
         if (answeredThisQ) {
-          // Student already answered — just highlight the correct answer
+          // Student already answered — highlight the correct answer
           document.querySelectorAll(".ans-btn").forEach((btn, i) => {
             btn.disabled = true;
             if (i === q.answer) btn.classList.add("correct");
@@ -1040,7 +1048,8 @@ function watchSession() {
 }
 
 function buildAnswerButtons(idx) {
-  const q = gameQuestions[idx];
+  // Always use local ALL_QUESTIONS — never Firebase data for answer buttons
+  const q = ALL_QUESTIONS[idx];
   if (!q) return;
   const grid = document.getElementById("p-answers");
   grid.innerHTML = q.opts.map((o, i) =>
@@ -1054,7 +1063,8 @@ function submitAnswer(idx) {
   if (answeredThisQ) return;
   answeredThisQ = true;
 
-  const q = gameQuestions[currentQ];
+  // Use local ALL_QUESTIONS for answer lookup — never Firebase data
+  const q = ALL_QUESTIONS[currentQ];
   const correct = idx === q.answer;
   const pts = correct ? 100 : 0;
 

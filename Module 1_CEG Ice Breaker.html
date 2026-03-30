@@ -570,7 +570,6 @@ let playerStreak = 0;
 let playerBestStreak = 0;
 let answeredThisQ = false;
 let answerRevealed = false;
-let questionReadyTime = 0;
 let listeners = [];
 
 // ════════════════════════════════════════════
@@ -938,155 +937,97 @@ function joinSession() {
   const name = document.getElementById("join-name").value.trim();
   const errEl = document.getElementById("join-error");
   errEl.style.display = "none";
-
   if (!db) {
     if (typeof firebase !== "undefined") initFirebase();
-    if (!db) {
-      errEl.textContent = "Still connecting — please wait a moment and try again.";
-      errEl.style.display = "block";
-      return;
-    }
+    if (!db) { errEl.textContent = "Still connecting."; errEl.style.display = "block"; return; }
   }
   if (code.length !== 4) { errEl.textContent = "Please enter the 4-character room code."; errEl.style.display = "block"; return; }
   if (!name) { errEl.textContent = "Please enter your name."; errEl.style.display = "block"; return; }
-
   db.ref("sessions/" + code).once("value", snap => {
     const session = snap.val();
-    if (!session || session.status === "ended") {
-      errEl.textContent = "Room not found or session has ended. Check the code.";
-      errEl.style.display = "block";
-      return;
-    }
+    if (!session || session.status === "ended") { errEl.textContent = "Room not found."; errEl.style.display = "block"; return; }
     roomCode = code;
     playerName = name;
     playerId = "p_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
     sessionRef = db.ref("sessions/" + roomCode);
-
-    // Register player
     sessionRef.child("players/" + playerId).set({ name: name, score: 0, correct: 0, bestStreak: 0 });
-    // Handle disconnect
     sessionRef.child("players/" + playerId).onDisconnect().remove();
-
     playerScore = 0; playerCorrect = 0; playerStreak = 0; playerBestStreak = 0;
+    answeredThisQ = false; answerRevealed = false;
     document.getElementById("w-room").textContent = roomCode;
     document.getElementById("p-name").textContent = name;
     document.getElementById("p-room").textContent = roomCode;
     document.getElementById("p-score").textContent = 0;
-
     showScreen("s-waiting");
-    watchSession();
+    listenForGameStart();
+  });
+}
+
+function listenForGameStart() {
+  sessionRef.on("value", snap => {
+    if (!snap.exists()) return;
+    const data = snap.val();
+    const pCount = Object.keys(data.players || {}).length;
+    const wCount = document.getElementById("w-count");
+    if (wCount) wCount.textContent = pCount + " players joined";
+    if (data.status === "playing" && document.getElementById("s-waiting").classList.contains("active")) {
+      currentQ = data.currentQ || 0;
+      answeredThisQ = false;
+      answerRevealed = false;
+      sessionRef.off();
+      listenForGameChanges();
+      renderStudentQuestion(currentQ);
+      showScreen("s-play");
+    }
+    if (data.status === "ended") sessionRef.off();
+  });
+}
+
+function listenForGameChanges() {
+  sessionRef.on("value", snap => {
+    if (!snap.exists()) return;
+    const data = snap.val();
+    if (data.currentQ !== undefined && data.currentQ !== currentQ) {
+      currentQ = data.currentQ;
+      answeredThisQ = false;
+      answerRevealed = false;
+      renderStudentQuestion(currentQ);
+    }
+    if (data.revealed === true && !answerRevealed) {
+      revealAnswerOnStudent();
+    }
+    if (data.status === "ended") {
+      sessionRef.off();
+      const players = Object.values(data.players || {});
+      showStudentResults(players, data);
+    }
   });
 }
 
 function renderStudentQuestion(idx) {
   const q = ALL_QUESTIONS[idx];
   if (!q) return;
-
   document.getElementById("p-qnum").textContent = "Question " + (idx + 1);
   document.getElementById("p-qtext").textContent = q.q;
   document.getElementById("p-prog").style.width = ((idx / ALL_QUESTIONS.length) * 100) + "%";
   document.getElementById("p-waiting-next").classList.remove("show");
   document.getElementById("p-pts-flash").innerHTML = "";
-
-  // Build buttons with NO onclick — use touch/click listeners below
-  const grid = document.getElementById("p-answers");
   const correctIdx = q.answer;
+  const grid = document.getElementById("p-answers");
   grid.innerHTML = q.opts.map((o, i) =>
-    `<button class="ans-btn" data-i="${i}">
-      <span class="ans-letter">${LETTERS[i]}</span>${o}
-    </button>`
+    "<button class='ans-btn' onclick='submitAnswer(" + i + ", " + correctIdx + ")'>" +
+    "<span class='ans-letter'>" + LETTERS[i] + "</span>" + o + "</button>"
   ).join("");
-
-  // Reset flags AFTER building buttons
   answeredThisQ = false;
   answerRevealed = false;
-  questionReadyTime = Date.now();
-
-  // Use click only — simple and reliable on both mobile and desktop
-  grid.querySelectorAll(".ans-btn").forEach(btn => {
-    const i = parseInt(btn.dataset.i);
-    btn.addEventListener("click", function() {
-      submitAnswer(i, correctIdx);
-    });
-  });
-
-  showScreen("s-play");
 }
-
-function revealAnswerOnStudent() {
-  if (answerRevealed) return;
-  answerRevealed = true;
-  const q = ALL_QUESTIONS[currentQ];
-  if (!q) return;
-
-  document.querySelectorAll(".ans-btn").forEach((btn, i) => {
-    btn.disabled = true;
-    if (i === q.answer) btn.classList.add("correct");
-  });
-
-  if (!answeredThisQ) {
-    answeredThisQ = true;
-    document.getElementById("p-pts-flash").innerHTML =
-      `<div style="color:var(--mgray);font-size:15px;">Time's up — no points this round</div>`;
-    document.getElementById("p-waiting-next").classList.add("show");
-  }
-}
-
-function watchSession() {
-  let lastQ = -1;
-
-  const lSess = sessionRef.on("value", snap => {
-    const session = snap.val();
-    if (!session) return;
-
-    const wCount = document.getElementById("w-count");
-    if (wCount) {
-      const playerCount = Object.keys(session.players || {}).length;
-      wCount.textContent = playerCount + " players joined";
-    }
-
-    if (session.status === "playing") {
-      const idx = session.currentQ || 0;
-
-      if (idx !== lastQ) {
-        lastQ = idx;
-        currentQ = idx;
-        renderStudentQuestion(idx);
-        return;
-      }
-
-      if (session.revealed === true && !answerRevealed) {
-        revealAnswerOnStudent();
-      }
-    }
-
-    if (session.status === "ended") {
-      const players = Object.values(session.players || {});
-      showStudentResults(players, session);
-    }
-  });
-  listeners.push({ ref: sessionRef, handle: lSess, event: "value" });
-}
-
-
-function buildAnswerButtons(idx) {
-  renderStudentQuestion(idx);
-}
-
 
 function submitAnswer(idx, correctIdx) {
   if (answeredThisQ) return;
-  // Ignore any tap that fires within 1 second of question rendering
-  // This definitively blocks ghost touches from screen transitions
-  if (!questionReadyTime || Date.now() - questionReadyTime < 1000) return;
   answeredThisQ = true;
-
   const isCorrect = idx === correctIdx;
   const pts = isCorrect ? 100 : 0;
-
-  // Lock all buttons — highlight chosen with subtle teal (same as Module 7)
-  // DO NOT show green/red yet — instructor reveals that
-  document.querySelectorAll(".ans-btn").forEach((btn, i) => {
+  document.querySelectorAll(".ans-btn").forEach(function(btn, i) {
     btn.disabled = true;
     if (i === idx) {
       btn.style.borderColor = "var(--teal)";
@@ -1094,7 +1035,6 @@ function submitAnswer(idx, correctIdx) {
       btn.style.fontWeight = "700";
     }
   });
-
   if (isCorrect) {
     playerCorrect++;
     playerStreak++;
@@ -1103,48 +1043,53 @@ function submitAnswer(idx, correctIdx) {
   } else {
     playerStreak = 0;
   }
-
-  // Save to Firebase
-  sessionRef.child("players/" + playerId).update({
-    score: playerScore,
-    correct: playerCorrect,
-    bestStreak: playerBestStreak
-  });
+  sessionRef.child("players/" + playerId).update({ score: playerScore, correct: playerCorrect, bestStreak: playerBestStreak });
   sessionRef.child("responses/" + currentQ + "/" + playerId).set({ ans: idx, correct: isCorrect });
-
   document.getElementById("p-score").textContent = playerScore;
-
-  // Neutral "locked in" message — no color hint (same as Module 7)
-  document.getElementById("p-pts-flash").innerHTML =
-    `<div style="color:var(--teal);font-size:15px;font-weight:600;">Answer locked in — waiting for instructor to reveal...</div>`;
+  document.getElementById("p-pts-flash").innerHTML = "<div style='color:var(--teal);font-size:15px;font-weight:600;'>Locked in &mdash; waiting for instructor...</div>";
   document.getElementById("p-waiting-next").classList.add("show");
 }
 
-function showStudentResults(players, session) {
-  const sorted = players.sort((a, b) => (b.score || 0) - (a.score || 0));
-  const me = players.find(p => p.name === playerName);
-  const totalQ = gameQuestions.length || session.qCount || 11;
-  const acc = totalQ > 0 ? Math.round((playerCorrect / totalQ) * 100) : 0;
-  const emoji = playerCorrect >= totalQ * 0.9 ? "🏆" : playerCorrect >= totalQ * 0.7 ? "🎯" : playerCorrect >= totalQ * 0.5 ? "👍" : "📖";
+function revealAnswerOnStudent() {
+  if (answerRevealed) return;
+  answerRevealed = true;
+  const q = ALL_QUESTIONS[currentQ];
+  if (!q) return;
+  document.querySelectorAll(".ans-btn").forEach(function(btn, i) {
+    btn.disabled = true;
+    btn.style.borderColor = "";
+    btn.style.background = "";
+    btn.style.fontWeight = "";
+    if (i === q.answer) btn.classList.add("correct");
+  });
+  if (!answeredThisQ) {
+    answeredThisQ = true;
+    document.getElementById("p-pts-flash").innerHTML = "<div style='color:var(--mgray);font-size:15px;'>Time&apos;s up &mdash; no points this round</div>";
+    document.getElementById("p-waiting-next").classList.add("show");
+  }
+}
 
-  document.getElementById("res-emoji").textContent = emoji;
+function showStudentResults(players, session) {
+  const sorted = players.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+  const totalQ = ALL_QUESTIONS.length;
+  const acc = totalQ > 0 ? Math.round((playerCorrect / totalQ) * 100) : 0;
+  document.getElementById("res-emoji").textContent = playerCorrect >= totalQ * 0.9 ? "A+" : playerCorrect >= totalQ * 0.7 ? "A" : playerCorrect >= totalQ * 0.5 ? "B" : "C";
   document.getElementById("res-pts").textContent = playerScore;
   document.getElementById("res-correct").textContent = playerCorrect;
   document.getElementById("res-streak").textContent = playerBestStreak;
   document.getElementById("res-acc").textContent = acc + "%";
-
-  const medals = ["🥇","🥈","🥉"];
+  const medals = ["1st", "2nd", "3rd"];
   const lb = document.getElementById("res-leaderboard");
-  lb.innerHTML = sorted.map((p, i) =>
-    `<div class="lb-final-row ${p.name === playerName ? 'me' : ''}">
-      <div class="lb-final-medal">${medals[i] || (i+1)}</div>
-      <div class="lb-final-name">${p.name}${p.name === playerName ? " (you)" : ""}</div>
-      <div class="lb-final-score">${p.score || 0} pts</div>
-    </div>`
-  ).join("");
-
+  lb.innerHTML = sorted.map(function(p, i) {
+    return "<div class='lb-final-row " + (p.name === playerName ? "me" : "") + "'>" +
+      "<div class='lb-final-medal'>" + (medals[i] || (i + 1)) + "</div>" +
+      "<div class='lb-final-name'>" + (p.name || "Player") + (p.name === playerName ? " (you)" : "") + "</div>" +
+      "<div class='lb-final-score'>" + (p.score || 0) + " pts</div>" +
+      "</div>";
+  }).join("");
   showScreen("s-results-student");
 }
+
 
 // ════════════════════════════════════════════
 // HELPERS
